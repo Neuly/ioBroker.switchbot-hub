@@ -406,6 +406,10 @@ class SwitchbotHub extends utils.Adapter {
 					statusValue = this.normalizePowerValue(statusValue);
 				}
 
+				if (statusState === "switch1Status" || statusState === "switch2Status") {
+					statusValue = this.normalizeSwitchValue(statusValue);
+				}
+
 				await this.stateSetCreate(`${deviceId}.${statusState}`, statusState, statusValue);
 				this.devices[deviceId].states[statusState] = statusValue;
 			}
@@ -577,6 +581,27 @@ class SwitchbotHub extends utils.Adapter {
 		return Boolean(value);
 	}
 
+
+	/**
+	 * Convert ioBroker switch values to a boolean.
+	 * Accepts boolean values and common string/number variants.
+	 *
+	 * @param {any} value
+	 * @returns {boolean}
+	 */
+	normalizeSwitchValue(value) {
+		if (typeof value === "boolean") return value;
+		if (typeof value === "number") return value === 1;
+
+		if (typeof value === "string") {
+			const normalized = value.trim().toLowerCase();
+			if (["true", "1", "on", "turnon"].includes(normalized)) return true;
+			if (["false", "0", "off", "turnoff"].includes(normalized)) return false;
+		}
+
+		return Boolean(value);
+	}
+
 	/**
 	 * Is called if a subscribed state changes
 	 * @param {string} id
@@ -629,10 +654,25 @@ class SwitchbotHub extends utils.Adapter {
 
 						case "Relay Switch 1PM":
 						case "Relay Switch 1":
-						case "Relay Switch 2PM":
 							if (deviceArray[3] === "power") {
-								const powerOn = this.normalizePowerValue(state.val);
-								apiData.command = powerOn ? "turnOn" : "turnOff";
+								const switchOn = this.normalizeSwitchValue(state.val);
+								apiData.command = switchOn ? "turnOn" : "turnOff";
+								apiData.parameter = "default";
+							}
+							break;
+
+						case "Relay Switch 2PM":
+							if (deviceArray[3] === "switch1Status") {
+								const switchOn = this.normalizeSwitchValue(state.val);
+								apiData.command = switchOn ? "turnOn" : "turnOff";
+								apiData.parameter = "1";
+							} else if (deviceArray[3] === "switch2Status") {
+								const switchOn = this.normalizeSwitchValue(state.val);
+								apiData.command = switchOn ? "turnOn" : "turnOff";
+								apiData.parameter = "2";
+							} else if (deviceArray[3] === "power") {
+								const switchOn = this.normalizeSwitchValue(state.val);
+								apiData.command = switchOn ? "turnOn" : "turnOff";
 								apiData.parameter = "default";
 							}
 							break;
