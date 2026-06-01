@@ -394,8 +394,20 @@ class SwitchbotHub extends utils.Adapter {
 
 			// Write status data of device to states
 			for (const statusState in devicesValues) {
-				await this.stateSetCreate(`${deviceId}.${statusState}`, statusState, devicesValues[statusState]);
-				this.devices[deviceId].states[statusState] = devicesValues[statusState];
+				let statusValue = devicesValues[statusState];
+
+				// Relay Switch power is returned by SwitchBot as "on"/"off".
+				// ioBroker switch states should be boolean so the Objects UI can toggle properly.
+				if (
+					statusState === "power"
+					&& this.devices[deviceId]
+					&& ["Relay Switch 1PM", "Relay Switch 1", "Relay Switch 2PM"].includes(this.devices[deviceId].deviceType)
+				) {
+					statusValue = this.normalizePowerValue(statusValue);
+				}
+
+				await this.stateSetCreate(`${deviceId}.${statusState}`, statusState, statusValue);
+				this.devices[deviceId].states[statusState] = statusValue;
 			}
 
 		} catch (error) {
@@ -544,6 +556,27 @@ class SwitchbotHub extends utils.Adapter {
 		}
 	}
 
+
+	/**
+	 * Convert ioBroker power values to a boolean.
+	 * Accepts boolean values and common string/number variants.
+	 *
+	 * @param {any} value
+	 * @returns {boolean}
+	 */
+	normalizePowerValue(value) {
+		if (typeof value === "boolean") return value;
+		if (typeof value === "number") return value === 1;
+
+		if (typeof value === "string") {
+			const normalized = value.trim().toLowerCase();
+			if (["true", "1", "on", "turnon"].includes(normalized)) return true;
+			if (["false", "0", "off", "turnoff"].includes(normalized)) return false;
+		}
+
+		return Boolean(value);
+	}
+
 	/**
 	 * Is called if a subscribed state changes
 	 * @param {string} id
@@ -591,6 +624,17 @@ class SwitchbotHub extends utils.Adapter {
 								}
 							}
 
+							break;
+
+
+						case "Relay Switch 1PM":
+						case "Relay Switch 1":
+						case "Relay Switch 2PM":
+							if (deviceArray[3] === "power") {
+								const powerOn = this.normalizePowerValue(state.val);
+								apiData.command = powerOn ? "turnOn" : "turnOff";
+								apiData.parameter = "default";
+							}
 							break;
 
 						case "Curtain":
@@ -653,7 +697,7 @@ class SwitchbotHub extends utils.Adapter {
 
 					// Set ACK to true if API post command successfully
 					if (apiResponse.statusCode === 100) {
-						this.setState(id, {ack: true});
+						this.setState(id, {val: state.val, ack: true});
 					} else {
 						this.log.error(`Unable to send command : ${apiResponse.message}`);
 					}
